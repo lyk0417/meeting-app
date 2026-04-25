@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+<title>会议日程</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#1a1a1a" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="会议日程" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<link rel="icon" href="icon-192.png" />
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #f5f3ee;
+    font-family: 'Inter', 'Noto Sans SC', system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent; overscroll-behavior: none;
+    overflow: hidden;
+  }
+  body {
+    /* respect notches */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    box-sizing: border-box;
+  }
+  #root { height: 100%; display: flex; flex-direction: column; }
+  /* Loading splash */
+  .splash { position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px; background: #f5f3ee; z-index: 9999;
+    transition: opacity .3s; }
+  .splash.hide { opacity: 0; pointer-events: none; }
+  .splash .mark { width: 64px; height: 64px; border-radius: 16px;
+    background: #1a1a1a; color: #fafaf7; display: flex; align-items: center; justify-content: center;
+    font-size: 32px; font-weight: 700; }
+  .splash .name { font-size: 14px; color: rgba(26,26,26,0.55); letter-spacing: 0.4px; }
+  /* Install hint */
+  .install-hint { position: fixed; left: 12px; right: 12px; bottom: 12px;
+    background: #1a1a1a; color: #fafaf7; padding: 12px 14px; border-radius: 12px;
+    font-size: 13px; line-height: 1.5; box-shadow: 0 8px 30px rgba(0,0,0,.18); z-index: 100;
+    display: none; }
+  .install-hint.show { display: block; }
+  .install-hint b { font-weight: 600; }
+  .install-hint button { background: #fafaf7; color: #1a1a1a; border: none;
+    padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600;
+    margin-left: 8px; cursor: pointer; font-family: inherit; }
+  .install-hint .x { background: transparent; color: rgba(250,249,247,0.6); padding: 4px 8px; }
+</style>
+</head>
+<body>
+<div class="splash" id="splash">
+  <div class="mark">会</div>
+  <div class="name">会议日程 · 加载中</div>
+</div>
+
+<div id="root"></div>
+
+<div class="install-hint" id="installHint">
+  <span id="installText"><b>安装到主屏幕</b>　点右上角菜单 ⋮ → "添加到主屏幕"</span>
+  <button id="installBtn" style="display:none">安装</button>
+  <button class="x" onclick="document.getElementById('installHint').classList.remove('show')">×</button>
+</div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<!-- Stub out DesignCanvas so app.jsx still mounts (it depends on these symbols). -->
+<script>
+  // Mobile shell: replace design canvas with passthrough divs.
+  window.DesignCanvas = function (props) { return React.createElement('div', { style: { display: 'contents' } }, props.children); };
+  window.DCSection   = function (props) {
+    // only render the FIRST artboard of the FIRST section (the live prototype).
+    if (props.id !== 'overview') return null;
+    return React.createElement('div', { style: { display: 'contents' } }, props.children);
+  };
+  window.DCArtboard  = function (props) {
+    return React.createElement('div', {
+      style: { display: 'flex', flex: 1, minHeight: 0, height: '100%' }
+    }, props.children);
+  };
+</script>
+
+<script type="text/babel" src="android-frame.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="tokens.jsx"></script>
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="screens-auth.jsx"></script>
+<script type="text/babel" src="screens-employee.jsx"></script>
+<script type="text/babel" src="screens-admin.jsx"></script>
+
+<!-- Mobile-specific app entry: skip the device frame, render LivePhone full-bleed -->
+<script type="text/babel" data-presets="env,react">
+  (function() {
+    // Wait for everything to load
+    const start = () => {
+      const TWEAK_DEFAULTS = { primaryColor: "#1a1a1a", dark: false, fontSize: 15, viewMode: "calendar" };
+
+      function buildTokens(t) {
+        const dark = t.dark;
+        const accent = t.primaryColor;
+        const c = accent.replace('#','');
+        const r = parseInt(c.slice(0,2),16), g = parseInt(c.slice(2,4),16), b = parseInt(c.slice(4,6),16);
+        const onAccent = (r*299+g*587+b*114)/1000 > 150 ? '#1a1a1a' : '#fafaf7';
+        const soft = accent + '1f';
+        return dark ? {
+          '--c-bg':'#0e0e0e','--c-surface':'#171717','--c-surface-2':'#1f1f1f',
+          '--c-text':'#f0efea','--c-text-secondary':'rgba(240,239,234,0.7)','--c-text-tertiary':'rgba(240,239,234,0.45)',
+          '--c-border':'rgba(255,255,255,0.10)','--c-divider':'rgba(255,255,255,0.06)',
+          '--c-pill-bg':'rgba(255,255,255,0.08)','--c-pill-fg':'rgba(240,239,234,0.85)',
+          '--c-accent': accent==='#1a1a1a'?'#fafaf7':accent, '--c-on-accent': accent==='#1a1a1a'?'#1a1a1a':onAccent, '--c-accent-soft':soft,
+          '--r-card':'12px','--r-input':'10px','--r-control':'10px','--r-pill':'999px',
+        } : {
+          '--c-bg':'#f5f3ee','--c-surface':'#ffffff','--c-surface-2':'#f0eee7',
+          '--c-text':'#1a1a1a','--c-text-secondary':'rgba(26,26,26,0.7)','--c-text-tertiary':'rgba(26,26,26,0.45)',
+          '--c-border':'rgba(0,0,0,0.08)','--c-divider':'rgba(0,0,0,0.05)',
+          '--c-pill-bg':'rgba(0,0,0,0.06)','--c-pill-fg':'rgba(26,26,26,0.75)',
+          '--c-accent':accent,'--c-on-accent':onAccent,'--c-accent-soft':soft,
+          '--r-card':'12px','--r-input':'10px','--r-control':'10px','--r-pill':'999px',
+        };
+      }
+
+      // Inline LivePhone (mobile version: no Android frame, fills screen)
+      const TABS = [
+        { id: 'home', label: '首页', icon: 'home' },
+        { id: 'mine', label: '我的会议', icon: 'briefcase' },
+        { id: 'profile', label: '我', icon: 'user' },
+      ];
+
+      function MobileApp() {
+        const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+        const [route, setRoute] = React.useState({ name: 'login' });
+        const [user, setUser] = React.useState(null);
+        const [meetings, setMeetings] = React.useState(MOCK.meetings);
+        const [view, setView] = React.useState(t.viewMode);
+        const [showReceipt, setShowReceipt] = React.useState(false);
+        const [showLockscreen, setShowLockscreen] = React.useState(false);
+        const [showBanner, setShowBanner] = React.useState(true);
+        const [checkinDone, setCheckinDone] = React.useState(false);
+        const [tweakOpen, setTweakOpen] = React.useState(false);
+        React.useEffect(()=>setView(t.viewMode), [t.viewMode]);
+
+        const todayStr = '2026-04-25';
+        const m = meetings.find(x => x.id === route.id);
+        const updateMeeting = (id, patch) => setMeetings(ms => ms.map(x => x.id === id ? {...x, ...patch} : x));
+
+        const handleLogin = () => {
+          setUser(MOCK.currentUser);
+          setRoute({ name: 'home' });
+        };
+
+        const vars = buildTokens(t);
+        const rootStyle = { ...vars, fontFamily: '"Inter", "Noto Sans SC", system-ui, sans-serif',
+          flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--c-bg)',
+          color: 'var(--c-text)', fontSize: t.fontSize, minHeight: 0, position: 'relative', overflow: 'hidden' };
+
+        let content = null, tabbar = null;
+        if (route.name === 'login') content = <LoginScreen onLogin={handleLogin} onSwitch={() => setRoute({name:'register'})} />;
+        else if (route.name === 'register') content = <RegisterScreen onSubmit={() => setRoute({name:'login'})} onBack={() => setRoute({name:'login'})} />;
+        else if (route.name === 'home') {
+          content = view === 'calendar'
+            ? <CalendarHome meetings={meetings} todayStr={todayStr} view={view} setView={setView} onOpen={(id)=>setRoute({name:'detail',id})} />
+            : <ListHome meetings={meetings} view={view} setView={setView} onOpen={(id)=>setRoute({name:'detail',id})} />;
+          tabbar = <TabBar items={TABS} current={'home'} onChange={(x)=>{ if(x==='mine')setRoute({name:'mine'}); if(x==='profile')setRoute({name:'profile'}); }} />;
+        } else if (route.name === 'mine') {
+          content = <ListHome meetings={meetings} view={'list'} setView={()=>setRoute({name:'home'})} onOpen={(id)=>setRoute({name:'detail',id})} />;
+          tabbar = <TabBar items={TABS} current={'mine'} onChange={(x)=>{ if(x==='home')setRoute({name:'home'}); if(x==='profile')setRoute({name:'profile'}); }} />;
+        } else if (route.name === 'profile') {
+          content = <ProfileScreen user={user || MOCK.currentUser} meetings={meetings}
+            onOpenOrg={()=>setRoute({name:'org'})}
+            onOpenMyOrganized={()=>setRoute({name:'organized'})}
+            onOpenCreate={()=>setRoute({name:'create'})} />;
+          tabbar = <TabBar items={TABS} current={'profile'} onChange={(x)=>{ if(x==='home')setRoute({name:'home'}); if(x==='mine')setRoute({name:'mine'}); }} />;
+        } else if (route.name === 'org') {
+          content = <OrgScreen onBack={()=>setRoute({name:'profile'})} />;
+        } else if (route.name === 'detail') {
+          content = <DetailScreen m={m} onBack={()=>setRoute({name:'home'})} onShowReceipt={()=>setShowReceipt(true)}
+            onLeave={()=>setRoute({name:'leave',id:m.id})} onCheckin={()=>{setCheckinDone(false);setRoute({name:'checkin',id:m.id});}} />;
+        } else if (route.name === 'leave') {
+          content = <LeaveScreen m={m} onBack={()=>setRoute({name:'detail',id:m.id})}
+            onSubmit={()=>{updateMeeting(m.id,{myStatus:'leave'});setRoute({name:'detail',id:m.id});}} />;
+        } else if (route.name === 'checkin') {
+          content = <CheckinScreen m={m} succeeded={checkinDone} onBack={()=>setRoute({name:'detail',id:m.id})}
+            onSuccess={()=>{setCheckinDone(true);setTimeout(()=>setRoute({name:'detail',id:m.id}),1200);}} />;
+        } else if (route.name === 'organized') {
+          content = <AdminListScreen meetings={meetings}
+            onBack={()=>setRoute({name:'profile'})}
+            onCreate={()=>setRoute({name:'create'})}
+            onOpen={(id)=>setRoute({name:'organized_dashboard',id})} />;
+        } else if (route.name === 'create') {
+          content = <AdminCreateScreen onBack={()=>setRoute({name:'home'})} onSubmit={()=>setRoute({name:'organized'})} />;
+        } else if (route.name === 'organized_dashboard') {
+          content = <AdminDashboardScreen m={m} onBack={()=>setRoute({name:'organized'})} />;
+        }
+
+        const bannerVisible = showBanner && (route.name === 'home' || route.name === 'mine');
+        const showCreateFab = route.name === 'home' || route.name === 'mine';
+
+        return (
+          <div style={rootStyle}>
+            {bannerVisible && <Banner tone="accent" icon="bell"
+              title="10 分钟后开始 · Q2 产品评审会"
+              body="3F 启明会议室 · 距离你 80m"
+              action={{label:'查看', onClick:()=>{setShowBanner(false);setRoute({name:'detail',id:'m1'});}}}
+              onDismiss={()=>setShowBanner(false)} />}
+            {content}
+            {tabbar}
+            {showReceipt && m && <ReceiptModal m={m} onClose={()=>setShowReceipt(false)}
+              onConfirm={()=>{updateMeeting(m.id,{myStatus:'confirmed'});setShowReceipt(false);}}
+              onLeave={()=>{setShowReceipt(false);setRoute({name:'leave',id:m.id});}} />}
+            {showLockscreen && <LockscreenReminder m={meetings[0]}
+              onTap={()=>{setShowLockscreen(false);setRoute({name:'detail',id:'m1'});}}
+              onClose={()=>setShowLockscreen(false)} />}
+            {showCreateFab && (
+              <button onClick={()=>setRoute({name:'create'})} title="新建会议" style={{
+                position:'absolute', bottom:80, right:14, zIndex:30,
+                height:50, padding:'0 20px 0 16px', borderRadius:999,
+                background:'var(--c-text)', color:'var(--c-surface)', border:'none', cursor:'pointer',
+                display:'inline-flex', alignItems:'center', gap:6,
+                fontSize:14, fontWeight:600, fontFamily:'inherit',
+                boxShadow:'0 8px 22px rgba(0,0,0,0.25)',
+              }}><Icon d="plus" size={18} stroke="var(--c-surface)" sw={2.2} />新建会议</button>
+            )}
+            {!showLockscreen && (route.name==='home'||route.name==='mine'||route.name==='detail') && (
+              <button onClick={()=>setShowLockscreen(true)} title="预览锁屏推送" style={{
+                position:'absolute', bottom: showCreateFab ? 142 : 72, right:14, zIndex:30,
+                width:40, height:40, borderRadius:'50%',
+                background:'var(--c-surface)', color:'var(--c-text)', border:'1px solid var(--c-border)', cursor:'pointer',
+                display:'inline-flex', alignItems:'center', justifyContent:'center',
+                boxShadow:'0 6px 18px rgba(0,0,0,0.12)',
+              }}><Icon d="bell" size={17} stroke="var(--c-text)" sw={1.8} /></button>
+            )}
+            {/* Floating Tweaks button */}
+            <button onClick={()=>setTweakOpen(o=>!o)} style={{
+              position:'absolute', top:8, right:8, zIndex:50,
+              width:32, height:32, borderRadius:8, border:'1px solid var(--c-border)',
+              background:'var(--c-surface)', color:'var(--c-text-secondary)', cursor:'pointer',
+              display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:11, opacity:0.7,
+            }}>⚙</button>
+            {tweakOpen && <MobileTweaks t={t} setTweak={setTweak} onClose={()=>setTweakOpen(false)} />}
+          </div>
+        );
+      }
+
+      function MobileTweaks({ t, setTweak, onClose }) {
+        return (
+          <div onClick={onClose} style={{
+            position:'absolute', inset:0, zIndex:200, background:'rgba(0,0,0,0.4)',
+            display:'flex', alignItems:'flex-end',
+          }}>
+            <div onClick={e=>e.stopPropagation()} style={{
+              width:'100%', background:'var(--c-bg)', borderTopLeftRadius:18, borderTopRightRadius:18,
+              padding:18, display:'flex', flexDirection:'column', gap:14,
+            }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <div style={{ fontSize:16, fontWeight:600 }}>设置</div>
+                <button onClick={onClose} style={{ background:'transparent', border:'none', fontSize:18, color:'var(--c-text-tertiary)', cursor:'pointer' }}>×</button>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span style={{ fontSize:14 }}>深色模式</span>
+                <input type="checkbox" checked={t.dark} onChange={e=>setTweak('dark', e.target.checked)} />
+              </div>
+              <div>
+                <div style={{ fontSize:13, color:'var(--c-text-secondary)', marginBottom:8 }}>首页视图</div>
+                <div style={{ display:'flex', gap:6 }}>
+                  {[['calendar','日历'],['list','列表']].map(([v,l]) => (
+                    <button key={v} onClick={()=>setTweak('viewMode', v)} style={{
+                      flex:1, padding:'10px 0', borderRadius:8,
+                      border:'1px solid '+(t.viewMode===v?'var(--c-text)':'var(--c-border)'),
+                      background:t.viewMode===v?'var(--c-text)':'var(--c-surface)',
+                      color:t.viewMode===v?'var(--c-surface)':'var(--c-text)',
+                      fontSize:13, cursor:'pointer', fontFamily:'inherit',
+                    }}>{l}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // mount
+      ReactDOM.createRoot(document.getElementById('root')).render(<MobileApp />);
+      // hide splash
+      setTimeout(()=>document.getElementById('splash').classList.add('hide'), 200);
+    };
+
+    // Babel takes a beat to compile; wait for our screen funcs to be ready.
+    const tick = () => {
+      if (window.LoginScreen && window.useTweaks && window.MOCK && window.OrgScreen) start();
+      else setTimeout(tick, 50);
+    };
+    tick();
+  })();
+</script>
+
+<!-- Animations + service worker registration -->
+<script>
+  // Animation keyframes
+  const s = document.createElement('style');
+  s.textContent = `@keyframes scan { 0% { top: 12px; } 50% { top: calc(100% - 14px); } 100% { top: 12px; } }
+                   @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }`;
+  document.head.appendChild(s);
+
+  // Register service worker (PWA offline + installable)
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js').catch((err) => console.warn('SW register failed', err));
+    });
+  }
+
+  // Install prompt (Chrome / Edge on Android)
+  let deferredPrompt;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    const hint = document.getElementById('installHint');
+    const btn = document.getElementById('installBtn');
+    const txt = document.getElementById('installText');
+    txt.innerHTML = '<b>安装会议日程</b>　把 App 加到主屏幕';
+    btn.style.display = 'inline-block';
+    btn.onclick = async () => {
+      hint.classList.remove('show');
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+    };
+    hint.classList.add('show');
+    setTimeout(() => hint.classList.remove('show'), 12000);
+  });
+
+  // iOS-style install hint (no beforeinstallprompt on iOS Safari)
+  window.addEventListener('load', () => {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    if (isIOS && !isStandalone) {
+      const hint = document.getElementById('installHint');
+      document.getElementById('installText').innerHTML = '<b>安装到主屏幕</b>　点底部分享 ↑ → "添加到主屏幕"';
+      hint.classList.add('show');
+      setTimeout(() => hint.classList.remove('show'), 15000);
+    }
+  });
+</script>
+</body>
+</html>
